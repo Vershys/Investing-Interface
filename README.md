@@ -1,8 +1,11 @@
 # Bastion — Investing Interface
 
-A private investment workspace with a graphite-and-olive visual system, responsive interactive charts, company research, explicit valuation scenarios, and a persistent decision journal.
+A private investment workspace with a near-black and cool-blue visual system, responsive interactive charts, company research, explicit valuation scenarios, and a persistent decision journal.
 
 ## Current release
+
+The market sidebar and Markets tab now use supported TradingView delayed stock-data embeds. A Finnhub quote adapter is ready but needs an appropriately entitled server-side API key. See [market-data implementation and research](docs/MARKET-DATA.md). Broker buttons beneath quotes open the selected Robinhood stock page without submitting orders.
+
 
 - Portfolio and per-stock graphs with seven ranges, normalized comparisons, accessible data tables, and CSV export.
 - Position search and sorting, capital allocation, and reconciled daily contribution calculations.
