@@ -19,3 +19,11 @@ Recharts was selected for this initial implementation because it is already inst
 ## Evaluation tasks
 
 Find the largest daily contributor, distinguish synthetic return from actual investment performance, locate an evidence source, explain an assumption change, and save/retrieve a decision. Measure task accuracy alongside speed. A predicted saliency heatmap is not evidence of comprehension.
+
+## Motion and progressive disclosure / September 2026
+
+Page changes use the browser's same-document View Transition API, progressively enhanced with a short directional horizontal transition scoped to main content. Navigation and the market sidebar remain stationary. New navigation skips an in-progress transition; reduced-motion preferences disable movement. No animation library or continuously running animation loop is added. Inline holdings use the existing Radix Collapsible primitive with height animation and keyboard-operated triggers; collapse returns focus to the position trigger.
+
+The design follows [web.dev's SPA transition guidance (August 2025)](https://web.dev/learn/css/view-transitions-spas) and [Chrome's same-document implementation guidance](https://developer.chrome.com/docs/web-platform/view-transitions/same-document). Motion communicates the location of a view change; it does not animate or exaggerate price changes. These are implementation and accessibility sources, not evidence that a particular animation improves financial decisions.
+
+Validation: TypeScript checking, production build and finance/lookup regression tests. Provider-hosted widget appearance and interaction motion have not been visually tested in a browser during this update; live native-provider integration still requires credentials.

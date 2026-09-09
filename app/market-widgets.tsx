@@ -1,6 +1,7 @@
 'use client';
 import LiveQuote from './live-quote';
-import {memo,useEffect,useRef,useState} from 'react';
+import SymbolPicker from './symbol-picker';
+import {memo,useEffect,useRef,useState,useCallback} from 'react';
 import {ArrowUpRight,Search,RefreshCw} from 'lucide-react';
 import {brokerUrl,marketSymbols,normalizeSymbol,providerUrl} from '@/lib/market';
 
@@ -14,10 +15,10 @@ export const MarketWidget=memo(function MarketWidget({symbol,theme,kind}:{symbol
  useEffect(()=>{
   const el=host.current;if(!el||!near||!active)return;
   setFailed(false);el.replaceChildren();
-  const widget=document.createElement('div');widget.className='tradingview-widget-container';widget.style.height='100%';widget.style.width='100%';
+  const widget=document.createElement('div');widget.className='tradingview-widget-container';widget.style.height='100%';widget.style.width='100%';widget.style.colorScheme=theme==='light'?'light':'dark';widget.style.backgroundColor=theme==='light'?'#ffffff':'#131722';
   const target=document.createElement('div');target.className='tradingview-widget-container__widget';target.style.height=kind==='chart'?'calc(100% - 32px)':'100%';target.style.width='100%';widget.appendChild(target);
   const script=document.createElement('script');script.src=`https://s3.tradingview.com/external-embedding/embed-widget-${scripts[kind]}.js`;script.async=true;
-  const config=kind==='quote'?{symbol,width:'100%',locale:'en',colorTheme:theme,isTransparent:true}:{symbol,autosize:true,interval:'D',timezone:'America/New_York',theme,style:'3',locale:'en',allow_symbol_change:false,calendar:false,hide_side_toolbar:false,support_host:'https://www.tradingview.com',backgroundColor:theme==='dark'?'#0f0f0f':'#fafafa'};
+  const config=kind==='quote'?{symbol,width:'100%',locale:'en',colorTheme:theme==='light'?'light':'dark',isTransparent:false}:{symbol,autosize:true,interval:'D',timezone:'America/New_York',theme,style:'3',locale:'en',allow_symbol_change:false,calendar:false,hide_side_toolbar:false,support_host:'https://www.tradingview.com',backgroundColor:theme==='dark'?'#0f0f0f':'#fafafa'};
   script.textContent=JSON.stringify(config);script.onerror=()=>setFailed(true);
   widget.appendChild(script);el.appendChild(widget);
   // iframe presence confirms embed initialization, not successful market-data delivery.
@@ -28,8 +29,8 @@ export const MarketWidget=memo(function MarketWidget({symbol,theme,kind}:{symbol
 });
 export function BrokerBubble({symbol}:{symbol:string}){return <a className="broker-bubble" href={brokerUrl(symbol)} target="_blank" rel="noopener noreferrer">Open {symbol.split(':').at(-1)} in Robinhood <ArrowUpRight size={15}/></a>}
 export const MarketSidebar=memo(function MarketSidebar({symbol,theme,onSelect,onChart}:{symbol:string;theme:string;onSelect:(s:string)=>void;onChart:()=>void}) {
- const [input,setInput]=useState('');const [error,setError]=useState('');
- const matches=marketSymbols.filter(x=>`${x.symbol} ${x.name}`.toLowerCase().includes(input.toLowerCase()));
- function submit(e:React.FormEvent){e.preventDefault();const next=normalizeSymbol(input);if(!next){setError('Enter a US ticker, such as AAPL or NYSE:LUMN.');return;}setError('');onSelect(next);}
- return <aside className="market-sidebar" aria-label="Stock market browser"><div className="section-title"><h2>Market browser</h2><span className="badge">PROVIDER DATA</span></div><p className="market-caption">Stock quotes · delayed feed available</p><form className="market-search" onSubmit={submit}><Search size={16}/><input type="search" aria-label="Find a stock by ticker or company" placeholder="Ticker or company" value={input} onChange={e=>{setInput(e.target.value);setError('');}} maxLength={25}/><button type="submit" aria-label="Load ticker"><ArrowUpRight size={17}/></button></form>{error&&<p role="alert" className="market-caption">{error}</p>}<div className="symbol-options">{matches.map(x=><button key={x.symbol} aria-pressed={symbol===x.symbol} onClick={()=>{onSelect(x.symbol);setError('');}}><strong>{x.symbol.split(':')[1]}</strong><span>{x.name}</span></button>)}{!matches.length&&<p className="market-caption">Press Enter to look up an exact ticker. Use EXCHANGE:TICKER if ambiguous.</p>}</div><div className="selected-market"><p className="eyebrow">{symbol} / SELECTED SECURITY</p><LiveQuote symbol={symbol}/><p className="eyebrow delayed-label">DELAYED MARKET DISPLAY</p><MarketWidget symbol={symbol} theme={theme} kind="quote"/><BrokerBubble symbol={symbol}/><p className="market-caption">Opens your broker; no order is submitted. Confirm the security and executable price there.</p><button className="market-chart-button" onClick={onChart}>Explore market chart <ArrowUpRight size={16}/></button></div><p className="market-disclosure">Quotes and statistics come directly from TradingView. Stock widget data is delayed. Read the feed’s time and delay indicators; the latest observation may be a previous close. Some symbols are unavailable. These quotes do not update the demo portfolio.</p></aside>;
+ const [nativeAvailable,setNativeAvailable]=useState(false);
+ const nativeStatus=useCallback((available:boolean)=>setNativeAvailable(available),[]);
+ useEffect(()=>setNativeAvailable(false),[symbol]);
+ return <aside className="market-sidebar" aria-label="Stock market browser"><div className="section-title"><h2>Market browser</h2><span className="badge">PROVIDER DATA</span></div><p className="market-caption">Stock quotes · delayed feed available</p><SymbolPicker onSelect={onSelect}/><div className="selected-market"><p className="eyebrow">{symbol} / SELECTED SECURITY</p><LiveQuote key={symbol} symbol={symbol} onAvailability={nativeStatus}/>{!nativeAvailable&&<><p className="eyebrow delayed-label">DELAYED MARKET DISPLAY</p><MarketWidget key={`${symbol}:${theme}`} symbol={symbol} theme={theme} kind="quote"/><BrokerBubble symbol={symbol}/></>}<p className="market-caption">Opens your broker; no order is submitted. Confirm the security and executable price there.</p><button className="market-chart-button" onClick={onChart}>Explore market chart <ArrowUpRight size={16}/></button></div><p className="market-disclosure">Native quotes use Finnhub when configured; the fallback display uses TradingView. Stock widget data is delayed. Read the feed’s time and delay indicators; the latest observation may be a previous close. Some symbols are unavailable. These quotes do not update the demo portfolio.</p></aside>;
 });

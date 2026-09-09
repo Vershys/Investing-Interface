@@ -1,0 +1,14 @@
+import {env} from 'cloudflare:workers';
+import {getChatGPTUser} from '../../../chatgpt-auth';
+import snapshot from '@/data/sec-tickers.json';
+import {createSymbolIndex,type SecurityResult} from '@/lib/symbol-search';
+import {marketSymbols} from '@/lib/market';
+const rows:SecurityResult[]=snapshot.data.filter(r=>r[3]).map(r=>{const symbol=String(r[2]),exchange=String(r[3]);const known=marketSymbols.find(x=>x.symbol.split(':')[1]===symbol);return {symbol,name:String(r[1]),exchange,chartSymbol:known?.symbol??(exchange==='Nasdaq'?`NASDAQ:${symbol}`:exchange==='NYSE'?`NYSE:${symbol}`:null),source:'SEC directory'};});
+const search=createSymbolIndex(rows);
+type Payload={results:SecurityResult[];coverage:string};
+const cache=new Map<string,{until:number;value:Payload}>();const pending=new Map<string,Promise<Payload>>();
+async function lookup(q:string):Promise<Payload>{const hit=cache.get(q);if(hit&&hit.until>Date.now())return hit.value;const active=pending.get(q);if(active)return active;
+ const task=(async()=>{const results=search(q);let coverage=`SEC directory snapshot · 9 Sep 2026 · ${rows.length.toLocaleString()} exchange-tagged securities. Includes US-listed ADRs; not a complete global directory.`;
+ if(env.FINNHUB_API_KEY&&q.length>=2&&pending.size<4){try{const r=await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}`,{headers:{'X-Finnhub-Token':env.FINNHUB_API_KEY},signal:AbortSignal.timeout(3500)});if(!r.ok)throw Error();const d=await r.json() as {result?:{symbol:string;description:string;type:string}[]};for(const x of (d.result??[]).slice(0,40)){if(typeof x.symbol!=='string'||typeof x.description!=='string'||results.some(y=>y.symbol===x.symbol))continue;const known=rows.find(y=>y.symbol===x.symbol);results.push(known??{symbol:x.symbol,name:x.description,exchange:'Provider listing',chartSymbol:null,source:'Finnhub'});}coverage+=' Additional provider matches available; unmatched chart identifiers require verification.';}catch{coverage+=' Provider search unavailable; directory results shown.';}}
+ const value={results:results.slice(0,25),coverage};if(cache.size>=128)cache.delete(cache.keys().next().value!);cache.set(q,{until:Date.now()+300000,value});return value;})();pending.set(q,task);try{return await task;}finally{pending.delete(q);}}
+export async function GET(request:Request){if(!await getChatGPTUser())return Response.json({error:'Sign in to search securities.'},{status:401});const q=(new URL(request.url).searchParams.get('q')??'').trim().toUpperCase();if(!q||q.length>64||!/[A-Z0-9]/.test(q))return Response.json({results:[],coverage:'Enter a ticker or company name.'});if(pending.size>=8&&!pending.has(q))return Response.json({error:'Search is busy. Please retry.'},{status:429});return Response.json(await lookup(q),{headers:{'Cache-Control':'private, max-age=300'}});}

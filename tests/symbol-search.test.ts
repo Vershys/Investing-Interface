@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createSymbolIndex,type SecurityResult} from '../lib/symbol-search.ts';
+const snapshot=JSON.parse(readFileSync(new URL('../data/sec-tickers.json',import.meta.url),'utf8'));
+const rows:SecurityResult[]=snapshot.data.filter((r:unknown[])=>r[3]).map((r:unknown[])=>({symbol:String(r[2]),name:String(r[1]),exchange:String(r[3]),chartSymbol:null,source:'SEC'}));
+const search=createSymbolIndex(rows);
+test('exact tickers outrank company-name matches',()=>{assert.equal(search('aapl')[0].symbol,'AAPL');assert.equal(search('aapl')[0].name.toLowerCase().includes('apple'),true);});
+test('company token prefixes can be searched in either order',()=>{assert.ok(search('taiwan semi').some(x=>x.symbol==='TSM'));assert.ok(search('semi taiwan').some(x=>x.symbol==='TSM'));});
+test('ADR listings and symbols outside initial suggestions are available',()=>{for(const s of ['TSM','BABA','SONY','IBM'])assert.equal(search(s)[0]?.symbol,s);});
+test('result count is bounded and unrelated input returns no match',()=>{assert.ok(search('a').length<=20);assert.deepEqual(search('nonexistentissuerxyz'),[]);assert.deepEqual(search(''),[]);});
