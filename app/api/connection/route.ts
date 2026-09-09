@@ -1,0 +1,1 @@
+export async function GET(){return Response.json({connected:false,mode:'demo',provider:'SnapTrade',message:'Brokerage access has not been configured. No Robinhood credentials are collected by this application.'},{headers:{'Cache-Control':'no-store'}});}
