@@ -72,3 +72,17 @@ test('quick scope avoids historical report expansion and keeps full research opt
  assert(quick.includes('at most 12'));assert(!quick.includes('HUGE_HISTORY'));
  assert(researchPrompt({ticker:'ORN',mode:'full'}).includes('at least 3 annual periods'));
 });
+
+test('overview facts are backward compatible and require safe, resolved evidence',()=>{
+ const old=fixture();validateReport(old);
+ const next={...fixture(),schemaVersion:'1.1',companyInfo:[{key:'ceo',value:'Fixture leader',sourceIds:['s1'],locator:'Leadership'}]};validateReport(next);
+ next.companyInfo[0].sourceIds=[];assert.throws(()=>validateReport(next),/evidence/);
+ next.companyInfo=[{key:'website',value:'javascript:bad',sourceIds:['s1'],locator:'Header'}];assert.throws(()=>validateReport(next),/Unsafe/);
+});
+test('financial visuals separate scales, scope and dates and preserve negative and zero values',async()=>{
+ const {financialGroups,financialAxis}=await import('../lib/research/visuals.mjs');
+ const rows=[metric(),{...metric(),id:'net_income_2025',label:'Net income',value:-10},{...metric(),id:'revenue_2024',period:'2024',value:50},{...metric(),id:'revenue_segment',scope:'segment',value:2},{...metric(),id:'revenue_millions',unit:'USD millions',value:2},{...metric(),id:'revenue_inferred',kind:'inferred',value:90},{...metric(),id:'revenue_missing',value:null}];
+ const groups=financialGroups(rows);assert.equal(groups.length,4);assert.equal(groups[0].metrics.length,2);
+ const axis=financialAxis(groups[0].metrics);assert.equal(axis.min,-10);assert.equal(axis.max,0);assert.equal(axis.zero,100);assert.equal(axis.position(-10),0);
+ assert(Number.isFinite(financialAxis([metric()]).zero));
+});
