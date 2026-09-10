@@ -76,7 +76,9 @@ async function main() {
         opened = true;
         clearInterval(poll);
         if (process.platform === 'win32') {
-          const opener=spawn('cmd.exe',['/d','/c','start "" http://127.0.0.1:4317'],{stdio:'ignore'});
+          // Let Windows open the URL directly. Passing START's empty title
+          // through Node/cmd quoting can make Windows try to open a backslash.
+          const opener=spawn('explorer.exe',['http://127.0.0.1:4317'],{stdio:'ignore'});
           opener.on('error',()=>console.log('Open http://127.0.0.1:4317 in your browser.'));
         } else console.log('Open http://127.0.0.1:4317 in your browser.');
       } catch { /* Keep checking while the first development build finishes. */ }
