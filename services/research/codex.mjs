@@ -33,7 +33,7 @@ export class CodexAdapter extends EventEmitter {
       if(m.id!==undefined){const x=this.pending.get(m.id);if(x){clearTimeout(x.timer);this.pending.delete(m.id);m.error?x.reject(new Error(m.error.message||'Codex request failed')):x.resolve(m.result);}}
       else if(m.method)this.emit('notification',m);
     });
-    await this.rpc('initialize',{clientInfo:{name:'bastion_research',title:'Bastion Research',version:'0.1.0'}});
+    await this.rpc('initialize',{clientInfo:{name:'bastion_research',title:'Bastion Research',version:'0.1.0'},capabilities:{experimentalApi:true}});
     this.send({method:'initialized',params:{}});
   }
   send(m){if(!this.proc?.stdin.writable)throw new Error('Codex is disconnected');this.proc.stdin.write(JSON.stringify(m)+'\n');}
@@ -46,7 +46,7 @@ export class CodexAdapter extends EventEmitter {
     const config={web_search:'live','features.shell_tool':false,'features.unified_exec':false,'apps._default.enabled':false};
     for(const name of Object.keys(current.config?.mcp_servers||{}))config[`mcp_servers.${JSON.stringify(name)}.enabled`]=false;
     for(const name of Object.keys(current.config?.apps||{}))config[`apps.${JSON.stringify(name)}.enabled`]=false;
-    const {thread}=await this.rpc('thread/start',{cwd:this.cwd,approvalPolicy:'untrusted',sandbox:'read-only',ephemeral:true,config});
+    const {thread}=await this.rpc('thread/start',{cwd:this.cwd,approvalPolicy:'untrusted',permissions:':read-only',ephemeral:true,config});
     onThread(thread.id);
     return new Promise((resolve,reject)=>{
       let finalText='',turnId=null,settled=false;
@@ -65,7 +65,7 @@ export class CodexAdapter extends EventEmitter {
         }
       };
       this.on('notification',listener);this.on('disconnect',disconnected);signal?.addEventListener('abort',aborted,{once:true});
-      this.rpc('turn/start',{threadId:thread.id,input:[{type:'text',text:prompt}],approvalPolicy:'untrusted',sandboxPolicy:{type:'readOnly',access:{type:'restricted',includePlatformDefaults:true,readableRoots:[this.cwd]}},...(schema?{outputSchema:schema}:{})}).then(r=>{turnId=r.turn.id;if(signal?.aborted||settled)stop();}).catch(finish);
+      this.rpc('turn/start',{threadId:thread.id,input:[{type:'text',text:prompt}],approvalPolicy:'untrusted',...(schema?{outputSchema:schema}:{})}).then(r=>{turnId=r.turn.id;if(signal?.aborted||settled)stop();}).catch(finish);
     });
   }
   close(){this.proc?.kill();}
