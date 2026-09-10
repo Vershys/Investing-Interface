@@ -15,7 +15,7 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
   const cwd=join(directory,'runtime');mkdirSync(cwd,{recursive:true,mode:0o700});
   const codex=adapter||new CodexAdapter({cwd});const active=new Map();let account={connected:false,type:null,email:null};let login=null;
   const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
-  const slim=r=>{const {report,answer,activity,rawResponse,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer};};
+  const slim=r=>{const {report,answer,activity,rawResponse,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer,canRecover:!!rawResponse};};
   async function body(req){let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4*1024*1024)throw new Error('Request exceeds 4 MB');}return JSON.parse(raw||'{}');}
   async function execute(run,previous){
     const abort=new AbortController();active.set(run.id,abort);
@@ -58,6 +58,17 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
         login={authUrl:result.authUrl,loginId:result.loginId};return json(res,200,login);
       }
       if(req.method==='GET'&&path==='/research-api/runs')return json(res,200,{runs:store.list().map(slim)});
+      const recover=path.match(/^\/research-api\/runs\/([a-f0-9-]{36})\/recover$/);
+      if(req.method==='POST'&&recover){
+        const run=store.get(recover[1]);
+        if(!run?.rawResponse)return json(res,404,{error:'No saved response is available for recovery.'});
+        if(active.has(run.id))return json(res,409,{error:'Wait for this run to end before recovery.'});
+        const {report,warnings}=validateGeneratedReport(JSON.parse(run.rawResponse));
+        if(report.company.ticker.toUpperCase()!==run.ticker.split(':').at(-1))throw new Error('Reported ticker differs from requested issuer. Recovery stopped.');
+        if(run.ticker.includes(':')&&report.company.exchange.toUpperCase()!==run.ticker.split(':')[0])throw new Error('Reported exchange differs from requested exchange. Verify the issuer before starting a corrected request.');
+        const saved=store.put({...run,report,warnings,status:'completed',stage:'Saved response recovered without a model call',error:undefined,completedAt:new Date().toISOString()});
+        return json(res,200,saved);
+      }
       const match=path.match(/^\/research-api\/runs\/([a-f0-9-]{36})(\/cancel)?$/);
       if(match){const run=store.get(match[1]);if(!run)return json(res,404,{error:'Run not found'});if(req.method==='GET'&&!match[2])return json(res,200,run);if(req.method==='POST'&&match[2]){active.get(run.id)?.abort();return json(res,200,{cancelled:active.has(run.id)});}}
       if(req.method==='POST'&&path==='/research-api/runs'){

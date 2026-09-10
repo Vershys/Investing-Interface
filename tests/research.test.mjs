@@ -18,7 +18,7 @@ test('immutable run identity survives restart and incomplete work becomes interr
 test('HTTP boundary, idempotent runs, report save, follow-up and import validation',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'bastion-service-'));
  class Adapter extends EventEmitter{calls=0;async account(){return {connected:true,type:'chatgpt',email:null};}async run({schema}){this.calls++;return {text:schema?JSON.stringify(fixture()):'Saved evidence answer'};}close(){}}
- const adapter=new Adapter();const {server}=createResearchService({directory:dir,adapter,port:4319});server.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}`;
+ const adapter=new Adapter();const {server,store}=createResearchService({directory:dir,adapter,port:4319});server.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}`;
  const request=(path,body,headers={})=>new Promise((resolve,reject)=>{const req=httpRequest(base+'/research-api'+path,{method:body===undefined?'GET':'POST',headers:{Host:'127.0.0.1:4319','X-Bastion-Client':'research-v1',Origin:'http://127.0.0.1:4317','Content-Type':'application/json',...headers}},res=>{let raw='';res.on('data',c=>raw+=c);res.on('end',()=>resolve({status:res.statusCode,json:async()=>JSON.parse(raw)}));});req.on('error',reject);req.end(body===undefined?undefined:JSON.stringify(body));});
  try{
   assert.equal((await request('/status',undefined,{Origin:'https://evil.example'})).status,403);
@@ -27,6 +27,8 @@ test('HTTP boundary, idempotent runs, report save, follow-up and import validati
   await request('/connect',{});const id=randomUUID();const input={id,ticker:'NYSE:ORN',question:'Debt'};
   assert.equal((await request('/runs',input)).status,202);assert.equal((await request('/runs',input)).status,200);assert.equal(adapter.calls,1);
   const saved=await (await request('/runs/'+id)).json();assert.equal(saved.status,'completed');assert.equal(saved.report.company.ticker,'ORN');
+  const recoveryId=randomUUID();store.put({id:recoveryId,ticker:'NYSE:ORN',createdAt:'2026-09-10',status:'failed',rawResponse:JSON.stringify(fixture())});const recovered=await (await request('/runs/'+recoveryId+'/recover',{})).json();assert.equal(recovered.status,'completed');assert.equal(adapter.calls,1);
+
   const followId=randomUUID();await request('/runs',{id:followId,ticker:'NYSE:ORN',parentRunId:id,question:'Why?'});const answer=await (await request('/runs/'+followId)).json();assert.equal(answer.answer,'Saved evidence answer');
   const invalid=fixture();invalid.metrics=[{...metric(),sourceIds:['missing']}];assert.equal((await request('/import',invalid)).status,400);
  }finally{server.close();await once(server,'close');rmSync(dir,{recursive:true,force:true});}
@@ -85,4 +87,19 @@ test('financial visuals separate scales, scope and dates and preserve negative a
  const groups=financialGroups(rows);assert.equal(groups.length,4);assert.equal(groups[0].metrics.length,2);
  const axis=financialAxis(groups[0].metrics);assert.equal(axis.min,-10);assert.equal(axis.max,0);assert.equal(axis.zero,100);assert.equal(axis.position(-10),0);
  assert(Number.isFinite(financialAxis([metric()]).zero));
+});
+
+test('generated hierarchy recovery removes unresolved edges without inventing ownership',async()=>{
+ const {validateGeneratedReport}=await import('../lib/research/schema.mjs');
+ const entity=(id,parentId)=>({id,parentId,name:id,entityType:'legal_entity',role:'Fixture',dayToDay:'Fixture',products:[],revenueSources:[],revenue:null,revenueUnit:'USD',revenuePeriod:'2025',president:null,publicContact:null,contactUrl:null,disclosureStatus:'Fixture',sourceIds:['s1'],locator:'Exhibit'});
+ const report=fixture();report.subsidiaries=[entity('a','issuer'),entity('b','c'),entity('c','b')];
+ assert.throws(()=>validateReport(report),/hierarchy/);
+ const fixed=validateGeneratedReport(report).report;
+ assert(fixed.subsidiaries.every(e=>e.parentId===null));assert(fixed.coverage.limitations.some(s=>s.includes('Unresolved parent')));
+ assert.equal(report.subsidiaries[0].parentId,'issuer');
+});
+test('chart accepts meaningful labels with opaque IDs and still excludes percentage metrics',async()=>{
+ const {financialGroups}=await import('../lib/research/visuals.mjs');
+ const rows=[{...metric(),id:'m1',label:'Net sales',value:123},{...metric(),id:'m2',label:'Net income attributable to company',value:3},{...metric(),id:'m3',label:'Operating margin',value:5,unit:'percent'}];
+ assert.equal(financialGroups(rows)[0].metrics.length,2);
 });

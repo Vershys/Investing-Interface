@@ -92,3 +92,9 @@ Quick refreshes send a short historical orientation instead of the previous full
 New reports use schema 1.1 with source-linked companyInfo fields. Existing schema 1.0 reports still load and import; their absent company facts display Not established. Merely opening a report never calls the model. The prompt reuses existing sources for sector, industry, CEO, website, headquarters, founding, IPO and identifiers; unknown fields stay null.
 
 The overview visualizes reported revenue/profit metrics only when period type, period text, scope and currency unit match exactly. Different scales or scopes produce separate selections. Annual and quarterly controls do not manufacture history. Negative values extend left of zero; missing metrics are omitted, not zero-filled. Definitions and original source references are accessible from every bar and financial row. The visual is a comparison of reported values, not an inferred waterfall or proof that source statements are accurate.
+
+## Recovering incomplete research
+
+Failed runs with a retained raw response offer Recover saved response. This revalidates locally without model usage; ticker and exchange checks remain enforced. Generated missing/cyclic parent links are removed and explicitly marked unresolved, preserving entity facts without inventing ownership. Imports remain strict.
+
+Overview charts recognize both metric IDs and labels. If annual chart data is absent but quarterly data exists, the overview starts on quarterly. All saved financial figures are expandable below the chart regardless of chart eligibility, and missing company facts are clickable for their recorded limitation. The prompt prioritizes annual and quarterly core statements before optional contract/detail research, with at most two extra targeted lookups requested for missing core data. Source-count limits remain soft targets. No fix can reconstruct financial facts that were never collected.
