@@ -1,16 +1,23 @@
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {EventEmitter} from 'node:events';
+import {mkdirSync} from 'node:fs';
+import {homedir} from 'node:os';
+import {join} from 'node:path';
 
 // Adapter boundary: all App Server protocol details stay outside the UI/controller.
 export class CodexAdapter extends EventEmitter {
-  constructor({cwd,binary=process.env.BASTION_CODEX_BIN||'codex',spawnProcess=spawn}={}){super();this.cwd=cwd;this.binary=binary;this.spawnProcess=spawnProcess;this.pending=new Map();this.seq=0;this.proc=null;this.ready=null;}
+  constructor({cwd,binary=process.env.BASTION_CODEX_BIN||'codex',codexHome=process.env.BASTION_CODEX_HOME||join(homedir(),'.bastion','codex'),spawnProcess=spawn}={}){super();this.cwd=cwd;this.binary=binary;this.codexHome=codexHome;this.spawnProcess=spawnProcess;this.pending=new Map();this.seq=0;this.proc=null;this.ready=null;}
   async start(){
     if(this.ready)return this.ready;
     this.ready=this.initialize().catch(e=>{this.ready=null;throw e;});return this.ready;
   }
   async initialize(){
-    const p=this.spawnProcess(this.binary,['app-server'],{cwd:this.cwd,stdio:['pipe','pipe','pipe']});this.proc=p;
+    // Use a Bastion-owned Codex home so an unrelated or older user-level MCP
+    // configuration cannot prevent the research app-server from starting.
+    // Authentication remains persistent, but is intentionally scoped to Bastion.
+    mkdirSync(this.codexHome,{recursive:true,mode:0o700});
+    const p=this.spawnProcess(this.binary,['app-server'],{cwd:this.cwd,env:{...process.env,CODEX_HOME:this.codexHome},stdio:['pipe','pipe','pipe']});this.proc=p;
     const fail=e=>{for(const x of this.pending.values()){clearTimeout(x.timer);x.reject(e);}this.pending.clear();this.ready=null;this.proc=null;this.emit('disconnect',e);};
     p.on('error',()=>fail(new Error('Codex could not start. Install the Codex CLI and make it available on PATH, then reconnect.')));
     p.on('exit',()=>fail(new Error('Codex stopped. Reconnect to continue.')));
