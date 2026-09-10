@@ -71,3 +71,12 @@ Run `npm run test:research` and `npx tsc --noEmit`. The existing Sites build is 
 Research quality is not yet benchmarked. The service currently delegates issuer resolution, web research and document interpretation to Codex. It does not independently retrieve/archive SEC documents, validate every quoted number against a filing, or prove comprehensive award coverage. Source URLs and locators are model-provided and require review. There is no automated financial data vendor feed or automatic sync with hosted Bastion memory. The first account-connected acceptance test is ORN, followed by a recurring-revenue company and a bank to check semantic differences.
 
 Atomic JSON files are a simple first local persistence layer, not the proposed full analytical database. There is no cross-process transaction/locking guarantee beyond the single bound service; do not run multiple services against the same directory. Incremental document ingestion, normalized fact history and deterministic financial calculations are subsequent extensions.
+
+
+## Research visibility
+
+New runs save up to 150 recent activity records with the report. The Research Desk displays separate clocks for the last successful service response and the last Codex research event. A responsive service does not prove that cloud research is progressing. After 60 seconds without a research event, the UI explains the silence without automatically retrying or declaring failure.
+
+Search actions, source links, agent commentary and supported readable summaries appear in the activity timeline. Summaries are not a complete account of internal reasoning. Raw reasoning and command output are not recorded. Older reports may have no timeline. The page polls every three seconds and retries service checks after connection loss. Closing the terminal still stops the research service. Let an existing run finish before restarting to install this update.
+
+This release adds visibility only: it does not infer private thoughts or render unfinished financial data as validated findings.

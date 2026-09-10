@@ -40,7 +40,7 @@ export class CodexAdapter extends EventEmitter {
   rpc(method,params={}){return new Promise((resolve,reject)=>{const id=++this.seq;const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`Codex request timed out: ${method}`));},30000);this.pending.set(id,{resolve,reject,timer});try{this.send({id,method,params});}catch(e){clearTimeout(timer);this.pending.delete(id);reject(e);}});}
   async account(){await this.start();const r=await this.rpc('account/read',{refreshToken:false});return {connected:r.account?.type==='chatgpt',type:r.account?.type||null,email:r.account?.email||null};}
   async login(){await this.start();return this.rpc('account/login/start',{type:'chatgpt',useHostedLoginSuccessPage:true,appBrand:'chatgpt'});}
-  async run({prompt,schema,onProgress=()=>{},onThread=()=>{},signal}){
+  async run({prompt,schema,onProgress=()=>{},onThread=()=>{},onEvent=()=>{},signal}){
     await this.start();if(signal?.aborted)throw new Error('Research cancelled');
     const current=await this.rpc('config/read',{includeLayers:false});
     const config={web_search:'live','features.shell_tool':false,'features.unified_exec':false,'apps._default.enabled':false};
@@ -57,9 +57,10 @@ export class CodexAdapter extends EventEmitter {
       const disconnected=e=>finish(e);
       const aborted=()=>finish(new Error('Research cancelled'));
       const listener=m=>{
-        const p=m.params||{};if(p.threadId!==thread.id)return;
+        const p=m.params||{};if(p.threadId!==thread.id&&!(turnId&&p.turnId===turnId&&!p.threadId))return;
+        onEvent(m);
         if(m.method==='item/started')onProgress(p.item?.type==='webSearch'?'Searching sources':'Analyzing company');
-        if(m.method==='item/completed'&&p.item?.type==='agentMessage')finalText=p.item.text||finalText;
+        if(m.method==='item/completed'&&p.item?.type==='agentMessage'&&p.item.phase!=='commentary')finalText=p.item.text||finalText;
         if(m.method==='turn/completed'){
           const t=p.turn;if(t?.status!=='completed')finish(new Error(t?.error?.message||`Research ${t?.status||'failed'}`));else finish();
         }

@@ -4,6 +4,7 @@ import {homedir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
+import {recordActivity} from './activity.mjs';
 import {ReportStore} from './store.mjs';
 import {CodexAdapter} from './codex.mjs';
 import {reportSchema,validateReport} from '../../lib/research/schema.mjs';
@@ -14,15 +15,16 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
   const cwd=join(directory,'runtime');mkdirSync(cwd,{recursive:true,mode:0o700});
   const codex=adapter||new CodexAdapter({cwd});const active=new Map();let account={connected:false,type:null,email:null};let login=null;
   const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
-  const slim=r=>{const {report,answer,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer};};
+  const slim=r=>{const {report,answer,activity,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer};};
   async function body(req){let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4*1024*1024)throw new Error('Request exceeds 4 MB');}return JSON.parse(raw||'{}');}
   async function execute(run,previous){
     const abort=new AbortController();active.set(run.id,abort);
-    let lastStage='';
-    const update=patch=>{Object.assign(run,patch);store.put(run);};
+    let lastStage='',activitySave=null;
+    const flushActivity=()=>{if(activitySave){clearTimeout(activitySave);activitySave=null;}store.put(run);};
+    const update=patch=>{Object.assign(run,patch);flushActivity();};
     try{
       update({status:'running',stage:'Resolving issuer and gathering evidence'});
-      const result=await codex.run({prompt:run.parentRunId?followupPrompt(run.question,previous):researchPrompt({ticker:run.ticker,question:run.question,previous}),schema:run.parentRunId?undefined:reportSchema,signal:abort.signal,onThread:threadId=>update({threadId}),onProgress:stage=>{if(stage!==lastStage){lastStage=stage;update({stage});}}});
+      const result=await codex.run({prompt:run.parentRunId?followupPrompt(run.question,previous):researchPrompt({ticker:run.ticker,question:run.question,previous}),schema:run.parentRunId?undefined:reportSchema,signal:abort.signal,onThread:threadId=>update({threadId}),onEvent:event=>{recordActivity(run,event);if(!activitySave)activitySave=setTimeout(()=>{activitySave=null;store.put(run);},500);},onProgress:stage=>{if(stage!==lastStage){lastStage=stage;update({stage});}}});
       if(abort.signal.aborted)throw new Error('Research cancelled');
       if(run.parentRunId)update({answer:result.text,status:'completed',stage:'Answer saved',completedAt:new Date().toISOString()});
       else{
@@ -34,7 +36,7 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
         update({report,warnings,status:'completed',stage:'Report saved',completedAt:new Date().toISOString()});
       }
     }catch(e){update({status:abort.signal.aborted?'interrupted':'failed',stage:'Stopped',error:e.message,completedAt:new Date().toISOString()});}
-    finally{active.delete(run.id);}
+    finally{flushActivity();active.delete(run.id);}
   }
   const server=createServer(async(req,res)=>{
     try{
