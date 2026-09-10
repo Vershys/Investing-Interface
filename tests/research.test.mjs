@@ -35,7 +35,7 @@ test('App Server handshake, structured output, final response and cancellation u
  const proc=new EventEmitter();proc.stdin=new PassThrough();proc.stdout=new PassThrough();proc.stderr=new PassThrough();proc.kill=()=>proc.emit('exit',0);const sent=[];let complete=true;
  proc.stdin.on('data',b=>{for(const line of b.toString().trim().split('\n')){const m=JSON.parse(line);sent.push(m);if(m.id===undefined)continue;let result={};if(['thread/start','turn/start'].includes(m.method)&&!['untrusted','on-request','never'].includes(m.params.approvalPolicy)){proc.stdout.write(JSON.stringify({id:m.id,error:{message:'Invalid approval policy variant'}})+'\n');continue;}if(m.method==='thread/start'&&m.params.permissions!==':read-only'){proc.stdout.write(JSON.stringify({id:m.id,error:{message:'Invalid permission profile'}})+'\n');continue;}if(m.method==='turn/start'&&m.params.sandboxPolicy?.access){proc.stdout.write(JSON.stringify({id:m.id,error:{message:'readOnly.access is no longer supported; use permissionProfile for restricted reads'}})+'\n');continue;}if(m.method==='thread/start')result={thread:{id:'thr_test'}};if(m.method==='turn/start')result={turn:{id:'turn_test'}};proc.stdout.write(JSON.stringify({id:m.id,result})+'\n');if(m.method==='turn/start'&&complete)queueMicrotask(()=>{proc.stdout.write(JSON.stringify({method:'item/completed',params:{threadId:'thr_test',item:{type:'agentMessage',text:'{"ok":true}'}}})+'\n');proc.stdout.write(JSON.stringify({method:'turn/completed',params:{threadId:'thr_test',turn:{status:'completed'}}})+'\n');});}});
  const codexHome=mkdtempSync(join(tmpdir(),'bastion-codex-home-'));let spawned;
- const adapter=new CodexAdapter({cwd:tmpdir(),codexHome,spawnProcess:(binary,args,options)=>{spawned={binary,args,options};return proc;}});try{const events=[];const result=await adapter.run({prompt:'test',schema:{type:'object'},onEvent:e=>events.push(e)});assert(events.some(e=>e.method==='turn/completed'));assert.equal(result.text,'{"ok":true}');assert.equal(spawned.options.env.CODEX_HOME,codexHome);assert.deepEqual(sent.slice(0,2).map(m=>m.method),['initialize','initialized']);assert.equal(sent.find(m=>m.method==='initialize').params.capabilities.experimentalApi,true);assert.equal(sent.find(m=>m.method==='thread/start').params.permissions,':read-only');assert.equal(sent.find(m=>m.method==='turn/start').params.sandboxPolicy,undefined);assert.equal(sent.find(m=>m.method==='turn/start').params.outputSchema.type,'object');complete=false;const controller=new AbortController();const pending=adapter.run({prompt:'cancel',signal:controller.signal});setTimeout(()=>controller.abort(),10);await assert.rejects(pending,/cancelled/);assert(sent.some(m=>m.method==='turn/interrupt'));}finally{adapter.close();rmSync(codexHome,{recursive:true,force:true});}
+ const adapter=new CodexAdapter({cwd:tmpdir(),codexHome,spawnProcess:(binary,args,options)=>{spawned={binary,args,options};return proc;}});try{const events=[];const result=await adapter.run({prompt:'test',model:'test-model',effort:'low',schema:{type:'object'},onEvent:e=>events.push(e)});assert(events.some(e=>e.method==='turn/completed'));assert.equal(result.text,'{"ok":true}');assert.equal(sent.find(m=>m.method==='turn/start').params.model,'test-model');assert.equal(sent.find(m=>m.method==='turn/start').params.effort,'low');assert.equal(spawned.options.env.CODEX_HOME,codexHome);assert.deepEqual(sent.slice(0,2).map(m=>m.method),['initialize','initialized']);assert.equal(sent.find(m=>m.method==='initialize').params.capabilities.experimentalApi,true);assert.equal(sent.find(m=>m.method==='thread/start').params.permissions,':read-only');assert.equal(sent.find(m=>m.method==='turn/start').params.sandboxPolicy,undefined);assert.equal(sent.find(m=>m.method==='turn/start').params.outputSchema.type,'object');complete=false;const controller=new AbortController();const pending=adapter.run({prompt:'cancel',signal:controller.signal});setTimeout(()=>controller.abort(),10);await assert.rejects(pending,/cancelled/);assert(sent.some(m=>m.method==='turn/interrupt'));}finally{adapter.close();rmSync(codexHome,{recursive:true,force:true});}
 });
 
 test('activity preserves source lifecycle and summaries without storing raw reasoning or final JSON',async()=>{
@@ -54,4 +54,21 @@ test('activity preserves source lifecycle and summaries without storing raw reas
  assert.equal(run.lastResearchEventAt,at);
  for(let i=0;i<160;i++)event('item/started',{item:{id:`s${i}`,type:'webSearch',action:{type:'openPage',url:'javascript:alert(1)'}}});
  assert.equal(run.activity.length,150);assert.equal(run.activity.at(-1).url,undefined);
+});
+
+test('generated metric recovery excludes unsupported calculations; imports remain strict',async()=>{
+ const {validateGeneratedReport}=await import('../lib/research/schema.mjs');
+ const report=fixture();report.metrics=[metric(),{...metric(),id:'fcf',label:'Free cash flow',kind:'calculated',calculation:''}];
+ assert.throws(()=>validateReport(report),/calculation/);
+ const recovered=validateGeneratedReport(report).report;
+ assert.equal(recovered.metrics.length,1);assert.equal(recovered.metrics[0].value,0);
+ assert(recovered.coverage.limitations.some(s=>s.includes('Free cash flow')));
+ assert.equal(report.metrics.length,2);
+ report.sources[0].url='javascript:alert(1)';assert.throws(()=>validateGeneratedReport(report),/Unsafe/);
+});
+test('quick scope avoids historical report expansion and keeps full research optional',async()=>{
+ const {researchPrompt}=await import('../services/research/prompt.mjs');
+ const quick=researchPrompt({ticker:'ORN',previous:{company:{ticker:'ORN'},asOf:'2026-01-01',summary:'x',metrics:['HUGE_HISTORY']}});
+ assert(quick.includes('at most 12'));assert(!quick.includes('HUGE_HISTORY'));
+ assert(researchPrompt({ticker:'ORN',mode:'full'}).includes('at least 3 annual periods'));
 });

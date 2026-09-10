@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {recordActivity} from './activity.mjs';
 import {ReportStore} from './store.mjs';
 import {CodexAdapter} from './codex.mjs';
-import {reportSchema,validateReport} from '../../lib/research/schema.mjs';
+import {reportSchema,validateReport,validateGeneratedReport} from '../../lib/research/schema.mjs';
 import {researchPrompt,followupPrompt,PROMPT_VERSION} from './prompt.mjs';
 
 export function createResearchService({directory=process.env.BASTION_RESEARCH_DATA||join(homedir(),'.bastion','research'),adapter,port=4319,origin='http://127.0.0.1:4317'}={}){
@@ -15,7 +15,7 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
   const cwd=join(directory,'runtime');mkdirSync(cwd,{recursive:true,mode:0o700});
   const codex=adapter||new CodexAdapter({cwd});const active=new Map();let account={connected:false,type:null,email:null};let login=null;
   const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
-  const slim=r=>{const {report,answer,activity,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer};};
+  const slim=r=>{const {report,answer,activity,rawResponse,...rest}=r;return {...rest,companyName:report?.company.name,hasReport:!!report,hasAnswer:!!answer};};
   async function body(req){let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4*1024*1024)throw new Error('Request exceeds 4 MB');}return JSON.parse(raw||'{}');}
   async function execute(run,previous){
     const abort=new AbortController();active.set(run.id,abort);
@@ -24,12 +24,13 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
     const update=patch=>{Object.assign(run,patch);flushActivity();};
     try{
       update({status:'running',stage:'Resolving issuer and gathering evidence'});
-      const result=await codex.run({prompt:run.parentRunId?followupPrompt(run.question,previous):researchPrompt({ticker:run.ticker,question:run.question,previous}),schema:run.parentRunId?undefined:reportSchema,signal:abort.signal,onThread:threadId=>update({threadId}),onEvent:event=>{recordActivity(run,event);if(!activitySave)activitySave=setTimeout(()=>{activitySave=null;store.put(run);},500);},onProgress:stage=>{if(stage!==lastStage){lastStage=stage;update({stage});}}});
+      const result=await codex.run({prompt:run.parentRunId?followupPrompt(run.question,previous):researchPrompt({ticker:run.ticker,question:run.question,previous,mode:run.mode}),model:run.model,effort:run.effort,schema:run.parentRunId?undefined:reportSchema,signal:abort.signal,onThread:threadId=>update({threadId}),onEvent:event=>{recordActivity(run,event);if(!activitySave)activitySave=setTimeout(()=>{activitySave=null;store.put(run);},500);},onProgress:stage=>{if(stage!==lastStage){lastStage=stage;update({stage});}}});
       if(abort.signal.aborted)throw new Error('Research cancelled');
       if(run.parentRunId)update({answer:result.text,status:'completed',stage:'Answer saved',completedAt:new Date().toISOString()});
       else{
         update({stage:'Checking report structure and evidence references'});
-        const {report,warnings}=validateReport(JSON.parse(result.text));
+        update({rawResponse:result.text});
+        const {report,warnings}=validateGeneratedReport(JSON.parse(result.text));
         const requested=run.ticker.split(':').at(-1);
         if(report.company.ticker.toUpperCase()!==requested)throw new Error('Reported ticker differs from requested issuer. Specify the exchange and retry.');
         if(run.ticker.includes(':')&&report.company.exchange.toUpperCase()!==run.ticker.split(':')[0])throw new Error('Reported exchange differs from the requested exchange. Verify the issuer.');
@@ -46,6 +47,7 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
       if(req.method==='POST'&&req.headers.origin!==origin)return json(res,403,{error:'A same-origin request is required.'});
       const path=new URL(req.url,`http://127.0.0.1:${port}`).pathname;
       if(req.method==='GET'&&path==='/research-api/status')return json(res,200,{service:'bastion-research',version:'0.1.0',account,login,activeRuns:[...active.keys()]});
+      if(req.method==='GET'&&path==='/research-api/models')return json(res,200,{models:await codex.models()});
       if(req.method==='POST'&&path==='/research-api/connect'){
         account=await codex.account();if(account.connected)login=null;return json(res,200,{account});
       }
@@ -70,7 +72,11 @@ export function createResearchService({directory=process.env.BASTION_RESEARCH_DA
         if(input.parentRunId){const parent=store.get(input.parentRunId);if(!parent?.report||parent.ticker!==ticker||!question)return json(res,400,{error:'Choose a saved company report and enter a question'});previous=parent.report;}
         else previous=store.list().find(r=>r.ticker===ticker&&r.report)?.report||null;
         if(!account.connected)return json(res,409,{error:'Connect your ChatGPT account before starting research.'});
-        const run=store.put({id:input.id,ticker,question,...(input.parentRunId?{parentRunId:input.parentRunId}:{}),promptVersion:PROMPT_VERSION,createdAt:new Date().toISOString(),status:'queued',stage:'Queued'});
+        const mode=input.mode==='full'?'full':'quick';
+        let model,effort;
+        if(codex.models){const models=await codex.models();const selected=input.model?models.find(m=>m.model===input.model):models.find(m=>m.isDefault);if(input.model&&!selected)return json(res,400,{error:'Selected model is unavailable. Refresh the model list.'});model=selected?.model;if(mode==='quick'&&selected?.supportedReasoningEfforts?.some(e=>e.reasoningEffort==='low'))effort='low';}
+        if(active.size)return json(res,409,{error:'A research run is already active.'});
+        const run=store.put({id:input.id,ticker,question,mode,model,effort,...(input.parentRunId?{parentRunId:input.parentRunId}:{}),promptVersion:PROMPT_VERSION,createdAt:new Date().toISOString(),status:'queued',stage:'Queued'});
         void execute(run,previous);return json(res,202,slim(run));
       }
       if(req.method==='POST'&&path==='/research-api/import'){

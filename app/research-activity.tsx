@@ -11,6 +11,7 @@ export function ResearchActivity({run,checkedAt,offline}:{run:Run;checkedAt:numb
  const latest=[...entries].reverse().find(e=>e.kind==='observed'&&e.id!=='turn-end');
  const serviceStale=offline||!checkedAt||now-checkedAt>15000;
  return <div className="rd-activity">
+ <p className="muted">{run.mode==='quick'?'Quick snapshot':run.mode==='full'?'Full investigation':'Original research scope'} · {run.model||'Account default model'}{run.effort?` · ${run.effort} reasoning`:null}</p>
  <div className="rd-health" aria-label="Research health">
  <div><span>Local service</span><strong>{serviceStale?'Connection unavailable':'Connected'}</strong><small>{checkedAt?`Last response ${elapsed(Math.max(0,Math.floor((now-checkedAt)/1000)))} ago`:'Waiting for response'}</small></div>
  <div><span>{active?'Last research event':'Research activity'}</span><strong>{silence===null?'Waiting for first event':active?`${elapsed(silence)} ago`:'Run ended'}</strong><small>Separate from the service connection</small></div>

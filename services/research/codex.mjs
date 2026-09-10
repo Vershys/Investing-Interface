@@ -39,14 +39,15 @@ export class CodexAdapter extends EventEmitter {
   send(m){if(!this.proc?.stdin.writable)throw new Error('Codex is disconnected');this.proc.stdin.write(JSON.stringify(m)+'\n');}
   rpc(method,params={}){return new Promise((resolve,reject)=>{const id=++this.seq;const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error(`Codex request timed out: ${method}`));},30000);this.pending.set(id,{resolve,reject,timer});try{this.send({id,method,params});}catch(e){clearTimeout(timer);this.pending.delete(id);reject(e);}});}
   async account(){await this.start();const r=await this.rpc('account/read',{refreshToken:false});return {connected:r.account?.type==='chatgpt',type:r.account?.type||null,email:r.account?.email||null};}
+  async models(){await this.start();const data=[];let cursor;do{const r=await this.rpc('model/list',{limit:100,includeHidden:false,...(cursor?{cursor}:{})});data.push(...(r.data||[]));cursor=r.nextCursor;}while(cursor);return data;}
   async login(){await this.start();return this.rpc('account/login/start',{type:'chatgpt',useHostedLoginSuccessPage:true,appBrand:'chatgpt'});}
-  async run({prompt,schema,onProgress=()=>{},onThread=()=>{},onEvent=()=>{},signal}){
+  async run({prompt,schema,model,effort,onProgress=()=>{},onThread=()=>{},onEvent=()=>{},signal}){
     await this.start();if(signal?.aborted)throw new Error('Research cancelled');
     const current=await this.rpc('config/read',{includeLayers:false});
     const config={web_search:'live','features.shell_tool':false,'features.unified_exec':false,'apps._default.enabled':false};
     for(const name of Object.keys(current.config?.mcp_servers||{}))config[`mcp_servers.${JSON.stringify(name)}.enabled`]=false;
     for(const name of Object.keys(current.config?.apps||{}))config[`apps.${JSON.stringify(name)}.enabled`]=false;
-    const {thread}=await this.rpc('thread/start',{cwd:this.cwd,approvalPolicy:'untrusted',permissions:':read-only',ephemeral:true,config});
+    const {thread}=await this.rpc('thread/start',{cwd:this.cwd,...(model?{model}:{}),approvalPolicy:'untrusted',permissions:':read-only',ephemeral:true,config});
     onThread(thread.id);
     return new Promise((resolve,reject)=>{
       let finalText='',turnId=null,settled=false;
@@ -66,7 +67,7 @@ export class CodexAdapter extends EventEmitter {
         }
       };
       this.on('notification',listener);this.on('disconnect',disconnected);signal?.addEventListener('abort',aborted,{once:true});
-      this.rpc('turn/start',{threadId:thread.id,input:[{type:'text',text:prompt}],approvalPolicy:'untrusted',...(schema?{outputSchema:schema}:{})}).then(r=>{turnId=r.turn.id;if(signal?.aborted||settled)stop();}).catch(finish);
+      this.rpc('turn/start',{threadId:thread.id,...(model?{model}:{}),...(effort?{effort}:{}),input:[{type:'text',text:prompt}],approvalPolicy:'untrusted',...(schema?{outputSchema:schema}:{})}).then(r=>{turnId=r.turn.id;if(signal?.aborted||settled)stop();}).catch(finish);
     });
   }
   close(){this.proc?.kill();}

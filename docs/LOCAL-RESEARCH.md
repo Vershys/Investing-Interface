@@ -80,3 +80,9 @@ New runs save up to 150 recent activity records with the report. The Research De
 Search actions, source links, agent commentary and supported readable summaries appear in the activity timeline. Summaries are not a complete account of internal reasoning. Raw reasoning and command output are not recorded. Older reports may have no timeline. The page polls every three seconds and retries service checks after connection loss. Closing the terminal still stops the research service. Let an existing run finish before restarting to install this update.
 
 This release adds visibility only: it does not infer private thoughts or render unfinished financial data as validated findings.
+
+## Lower-usage research
+
+Quick snapshot is the default for new requests: latest annual/quarterly data, up to 12 metrics and bounded key sections, with a prompt target of 3–5 documents and at most 6 search/page actions. These are instructions, not enforced token caps. Full investigation remains available. Quick mode sends low reasoning effort only when the selected model advertises support. The model picker is loaded from the signed-in Codex account; prices and subscription multipliers are not inferred from model names. Account default remains selected until you choose a different model.
+
+Quick refreshes send a short historical orientation instead of the previous full report. Existing follow-ups still receive the saved report for evidence continuity. New generated responses are retained locally for validation debugging. Calculated metric rows lacking formulas are omitted with an explicit coverage limitation; strict import validation is unchanged. Other validation failures remain visible. Previously failed runs without a saved response cannot be recovered by this update.
