@@ -133,3 +133,6 @@ body{background:radial-gradient(ellipse at 88% 0%,#430ba3 0,transparent 47%),lin
 .rd-source-dialog [data-slot=dialog-header]{text-align:left;padding-right:28px}.rd-source-dialog [data-slot=dialog-title]{font-size:22px;line-height:1.35}.rd-source-dialog .rd-source-content{padding:0;overflow:visible}.rd-source-dialog .source-row{border-radius:9px;padding:14px;margin-top:10px;background:var(--secondary)}.rd-source-dialog .rd-facts{padding:16px;border:1px solid var(--border);border-radius:10px}.rd-source-dialog .rd-source-content>p{overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){.rd-source-dialog{animation:none!important;transition:none!important}}
 @media(max-width:550px){.rd-source-dialog{padding:22px!important}.rd-report-tabs>.rd-tabs>[data-slot=tabs-trigger]{padding-inline:12px!important}}
+/* Fill the viewport; the workspace itself is the page surface. */
+body{padding:0;background:var(--background)}
+.app-shell{max-width:none;width:100%;min-height:100dvh;margin:0;border:0;border-radius:0;box-shadow:none}
