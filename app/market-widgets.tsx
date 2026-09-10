@@ -15,10 +15,10 @@ export const MarketWidget=memo(function MarketWidget({symbol,theme,kind}:{symbol
  useEffect(()=>{
   const el=host.current;if(!el||!near||!active)return;
   setFailed(false);el.replaceChildren();
-  const widget=document.createElement('div');widget.className='tradingview-widget-container';widget.style.height='100%';widget.style.width='100%';widget.style.colorScheme=theme==='light'?'light':'dark';widget.style.backgroundColor=theme==='light'?'#ffffff':'#131722';
+  const widget=document.createElement('div');widget.className='tradingview-widget-container';widget.style.height='100%';widget.style.width='100%';widget.style.colorScheme=theme==='light'?'light':'dark';widget.style.backgroundColor=theme==='light'?'#ffffff':'#111418';
   const target=document.createElement('div');target.className='tradingview-widget-container__widget';target.style.height=kind==='chart'?'calc(100% - 32px)':'100%';target.style.width='100%';widget.appendChild(target);
   const script=document.createElement('script');script.src=`https://s3.tradingview.com/external-embedding/embed-widget-${scripts[kind]}.js`;script.async=true;
-  const config=kind==='quote'?{symbol,width:'100%',locale:'en',colorTheme:theme==='light'?'light':'dark',isTransparent:false}:{symbol,autosize:true,interval:'D',timezone:'America/New_York',theme,style:'3',locale:'en',allow_symbol_change:false,calendar:false,hide_side_toolbar:false,support_host:'https://www.tradingview.com',backgroundColor:theme==='dark'?'#0f0f0f':'#fafafa'};
+  const config=kind==='quote'?{symbol,width:'100%',locale:'en',colorTheme:theme==='light'?'light':'dark',isTransparent:true}:{symbol,autosize:true,interval:'D',timezone:'America/New_York',theme,style:'3',locale:'en',allow_symbol_change:false,calendar:false,hide_side_toolbar:false,support_host:'https://www.tradingview.com',backgroundColor:theme==='dark'?'#08090B':'#fafafa'};
   script.textContent=JSON.stringify(config);script.onerror=()=>setFailed(true);
   widget.appendChild(script);el.appendChild(widget);
   // iframe presence confirms embed initialization, not successful market-data delivery.

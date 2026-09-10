@@ -1,0 +1,8 @@
+'use client';
+import {createContext,useContext,useState,useEffect,useCallback,type ReactNode} from 'react';
+import type {MemoryRecord,RecordInput} from '@/lib/agent/types';
+type State={records:MemoryRecord[];loading:boolean;error:string;refresh:()=>Promise<void>;save:(record:RecordInput)=>Promise<MemoryRecord>};
+const Context=createContext<State|null>(null);
+export async function api<T>(path:string,body?:unknown):Promise<T>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json() as T & {error?:string};if(!r.ok)throw new Error(data.error||'Request failed. Please retry.');return data as T;}
+export function AgentProvider({children}:{children:ReactNode}){const [records,setRecords]=useState<MemoryRecord[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState('');const refresh=useCallback(async()=>{try{const data=await api<{records:MemoryRecord[]}>('/api/memory');setRecords(data.records);setError('');}catch(e){setError(e instanceof Error?e.message:'Memory unavailable.');}finally{setLoading(false);}},[]);useEffect(()=>{void refresh();},[refresh]);const save=useCallback(async(record:RecordInput)=>{const result=await api<{record:MemoryRecord}>('/api/memory',record);await refresh();return result.record;},[refresh]);return <Context.Provider value={{records,loading,error,refresh,save}}>{children}</Context.Provider>;}
+export function useMemory(){const c=useContext(Context);if(!c)throw new Error('Memory provider missing');return c;}

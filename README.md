@@ -40,3 +40,7 @@ The first release uses D1 for the journal, replacing the earlier provisional Pos
 `app/workspace.tsx` owns the four working views; `lib/finance.ts` contains deterministic calculations and explicitly synthetic data. `app/api/journal/route.ts` validates and saves records; `app/api/connection/route.ts` reports the disconnected state. `.openai/hosting.json` identifies the deployment and logical database binding. There are no provider secrets to configure for demo mode.
 
 See [implementation roadmap](docs/ROADMAP.md) and [design rationale](docs/DESIGN.md).
+
+## Local company research
+
+The Research Desk now includes a separate local service and ChatGPT account connection. See [Local research setup](docs/LOCAL-RESEARCH.md) for startup instructions, data storage, supported workflows and the remaining live-account verification gate. Start both processes with `npm run local`.

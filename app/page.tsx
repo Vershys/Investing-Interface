@@ -1,2 +1,3 @@
 import Workspace from './workspace';
-export default function Home(){return <Workspace/>;}
+import {AgentProvider} from './agent-state';
+export default function Home(){return <AgentProvider><Workspace/></AgentProvider>;}

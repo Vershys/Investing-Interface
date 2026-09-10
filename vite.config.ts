@@ -52,6 +52,7 @@ export default defineConfig(async () => {
 
   return {
     server: {
+      ...(process.env.BASTION_LOCAL_RESEARCH === "1" ? { strictPort: true, proxy: { "/research-api": { target: "http://127.0.0.1:4319", changeOrigin: true } } } : {}),
       ...(managedLinux ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] } : {}),
       ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
     },
